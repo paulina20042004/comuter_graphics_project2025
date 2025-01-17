@@ -1,0 +1,116 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="src\Box.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Camera.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Render_Utils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Shader_Loader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\SOIL\SOIL.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Texture.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\SOIL\stb_image_aug.c">
+      <Filter>Source Files\SOILD</Filter>
+    </ClCompile>
+    <ClCompile Include="src\SOIL\image_DXT.c">
+      <Filter>Source Files\SOILD</Filter>
+    </ClCompile>
+    <ClCompile Include="src\SOIL\image_helper.c">
+      <Filter>Source Files\SOILD</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\Camera.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ex_9_1.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\objload.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Render_Utils.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Shader_Loader.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Texture.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\SOIL\stbi_DDS_aug_c.h">
+      <Filter>Source Files\SOILD</Filter>
+    </ClInclude>
+    <ClInclude Include="src\SOIL\stb_image_aug.h">
+      <Filter>Source Files\SOILD</Filter>
+    </ClInclude>
+    <ClInclude Include="src\SOIL\stbi_DDS_aug.h">
+      <Filter>Source Files\SOILD</Filter>
+    </ClInclude>
+    <ClInclude Include="src\SOIL\SOIL.h">
+      <Filter>Source Files\SOILD</Filter>
+    </ClInclude>
+    <ClInclude Include="src\SOIL\image_DXT.h">
+      <Filter>Source Files\SOILD</Filter>
+    </ClInclude>
+    <ClInclude Include="src\SOIL\image_helper.h">
+      <Filter>Source Files\SOILD</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\shader_8_sun.frag">
+      <Filter>Shader Files</Filter>
+    </None>
+    <None Include="shaders\shader_8_sun.vert">
+      <Filter>Shader Files</Filter>
+    </None>
+    <None Include="shaders\shader_9_1.frag">
+      <Filter>Shader Files</Filter>
+    </None>
+    <None Include="shaders\shader_9_1.vert">
+      <Filter>Shader Files</Filter>
+    </None>
+    <None Include="shaders\shadowSun.frag">
+      <Filter>Shader Files</Filter>
+    </None>
+    <None Include="shaders\shadowSun.vert">
+      <Filter>Shader Files</Filter>
+    </None>
+    <None Include="shaders\test.frag">
+      <Filter>Shader Files</Filter>
+    </None>
+    <None Include="shaders\test.vert">
+      <Filter>Shader Files</Filter>
+    </None>
+    <None Include="shaders\shader_tex.frag">
+      <Filter>Shader Files</Filter>
+    </None>
+    <None Include="shaders\shader_tex.vert">
+      <Filter>Shader Files</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Shader Files">
+      <UniqueIdentifier>{22a5fa4c-3513-4b04-a256-c0d947a3473d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{ecef9a69-651f-4c98-96a4-cc2d001c4de0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\SOILD">
+      <UniqueIdentifier>{a69ee038-818a-426a-8a4c-bf1545c7285b}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
