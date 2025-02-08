@@ -46,7 +46,12 @@ namespace texture {
 	GLuint chair_map;
 	GLuint table;
 	GLuint table_map;
-
+	GLuint bird1_map;
+	GLuint bird1;
+	GLuint bird2_map;
+	GLuint bird2;
+	GLuint bird3_map;
+	GLuint bird3;
 }
 GLuint programTex;
 
@@ -61,6 +66,7 @@ Core::Shader_Loader shaderLoader;
 
 Core::RenderContext shipContext;
 Core::RenderContext sphereContext;
+Core::RenderContext birdContext;
 
 glm::vec3 sunPos = glm::vec3(-4.740971f, 2.149999f, 0.369280f);
 glm::vec3 sunDir = glm::vec3(-0.93633f, 0.351106, 0.003226f);
@@ -92,6 +98,33 @@ bool shadowsEnabled = true;
 
 float lastTime = -1.f;
 float deltaTime = 0.f;
+
+struct AABB {
+	float xMin, yMin, zMin;
+	float xMax, yMax, zMax;
+
+	AABB(float xMin, float yMin, float zMin, float xMax, float yMax, float zMax)
+		: xMin(xMin), yMin(yMin), zMin(zMin), xMax(xMax), yMax(yMax), zMax(zMax) {}
+
+};
+
+struct Boid {
+	glm::vec3 position;
+	glm::vec3 velocity;
+	glm::vec3 direction;
+	int groupId;
+	AABB boundingBox;
+	Boid()
+		: position(0.0f, 0.0f, 0.0f), velocity(0.0f, 0.0f, 0.0f), direction(0.0f, 0.0f, 0.0f), groupId(0), boundingBox(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f) {}
+
+};
+
+struct Obstacle {
+	glm::vec3 position;
+	AABB boundingBox;
+	Obstacle()
+		: position(0.0f, 0.0f, 0.0f), boundingBox(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f) {}
+};
 
 void updateDeltaTime(float time) {
 	if (lastTime < 0) {
@@ -294,6 +327,219 @@ void renderShadowmapSun() {
 }
 
 
+std::vector<Boid> boids;
+std::vector<Obstacle> obstacles;
+
+void updateBoundingBox(Boid& boid) {
+	float size = 1.5f;
+	boid.boundingBox = AABB(boid.position.x - size,
+		boid.position.y - size,
+		boid.position.z - size,
+		boid.position.x + size,
+		boid.position.y + size,
+		boid.position.z + size);
+}
+
+
+bool checkCollision(const AABB& box1, const AABB& box2) {
+	return !(box1.xMax < box2.xMin || box1.xMin > box2.xMax ||
+		box1.yMax < box2.yMin || box1.yMin > box2.yMax ||
+		box1.zMax < box2.zMin || box1.zMin > box2.zMax);
+}
+
+
+glm::vec3 chcekColisionBoidsWithObstacles(const Boid& self, const std::vector<Obstacle>& obstacles) {
+	glm::vec3 avoidanceVector(0.0f);  
+	for (const auto& obstacle : obstacles) {
+	
+		if (checkCollision(self.boundingBox, obstacle.boundingBox)) {
+			//std::cout << "Kolizja zachodzi!" << std::endl;
+			glm::vec3 difference = self.position - obstacle.position;
+			float distance = glm::length(difference);
+
+			if (distance > 0.0f) {
+				avoidanceVector += glm::normalize(difference) / distance;
+
+			}
+			return avoidanceVector;
+		}
+	}
+	return avoidanceVector;
+}
+
+void initBoids(int numBoids) {
+	for (int i = 0; i < numBoids; ++i) {
+		Boid newBoid;
+
+		newBoid.position = glm::vec3(rand() % 50 - 25, rand() % 50 - 25, rand() % 50 - 25);
+		newBoid.velocity = glm::vec3(rand() % 2 - 1, rand() % 2 - 1, rand() % 2 - 1);
+		newBoid.groupId = i % 3;
+
+		newBoid.boundingBox = AABB(
+			newBoid.position.x - 1.0f,
+			newBoid.position.y - 1.0f,
+			newBoid.position.z - 1.0f,
+			newBoid.position.x + 1.0f,
+			newBoid.position.y + 1.0f,
+			newBoid.position.z + 1.0f
+		);
+
+		boids.push_back(newBoid);
+	}
+}
+
+
+void initObstacles(int numObstacles) {
+	for (int i = 0; i < numObstacles; ++i) {
+		Obstacle newObstacle;
+		newObstacle.position = glm::vec3(rand() % 10 - 5, rand() % 10 - 5, rand() % 10 - 5);
+		newObstacle.boundingBox = AABB(newObstacle.position.x - 4.5f,
+			newObstacle.position.y - 4.5f,
+			newObstacle.position.z - 4.5f,
+			newObstacle.position.x + 4.5f,
+			newObstacle.position.y + 4.5f,
+			newObstacle.position.z + 4.5f);
+		obstacles.push_back(newObstacle);
+	}
+}
+
+void addObstacle(glm::vec3 position, float range) {
+	Obstacle newObstacle;
+	newObstacle.position = position;
+	newObstacle.boundingBox = AABB(newObstacle.position.x - range,
+		newObstacle.position.y - range,
+		newObstacle.position.z - range,
+		newObstacle.position.x + range,
+		newObstacle.position.y + range,
+		newObstacle.position.z + range);
+	obstacles.push_back(newObstacle);
+}
+
+
+
+glm::vec3 separation(const Boid& self, const std::vector<Boid>& boids, float separationRadius) {
+	glm::vec3 avoidVector(0.0f, 0.0f, 0.0f);
+
+	for (const auto& boid : boids) {
+		if (&boid == &self || boid.groupId != self.groupId) continue;
+
+		float distance = glm::distance(self.position, boid.position);
+
+		if (distance < separationRadius && distance > 0.0f) {
+			glm::vec3 difference = self.position - boid.position;
+			avoidVector += glm::normalize(difference) / distance;
+		}
+	}
+
+	return avoidVector;
+}
+
+
+glm::vec3 align(const Boid& currentBoid, const std::vector<Boid>& boids, float neighborRadius, float maxSpeed) {
+	glm::vec3 avgBoidVector(0.0f, 0.0f, 0.0f);
+	int count = 0;
+
+	for (const auto& boid : boids) {
+		if (&boid == &currentBoid || boid.groupId != currentBoid.groupId) {
+			continue;
+		}
+
+		float distance = glm::distance(currentBoid.position, boid.position);
+
+		if (distance < neighborRadius) {
+			avgBoidVector += boid.velocity;
+			count++;
+		}
+	}
+
+	if (count > 0) {
+		avgBoidVector /= static_cast<float>(count);
+
+		if (glm::length(avgBoidVector) > 0.0f) {
+			avgBoidVector = glm::normalize(avgBoidVector) * maxSpeed;
+		}
+
+		return avgBoidVector - currentBoid.velocity;
+	}
+
+	return glm::vec3(0.0f, 0.0f, 0.0f);
+}
+
+
+
+glm::vec3 cohesion(const Boid& currentBoid, const std::vector<Boid>& boids, float neighborRadius) {
+	glm::vec3 centerOfGroup(0.0f, 0.0f, 0.0f);
+	int count = 0;
+
+	for (const auto& other : boids) {
+		if (&currentBoid == &other || other.groupId != currentBoid.groupId) continue;
+
+		float distance = glm::distance(currentBoid.position, other.position);
+		if (distance < neighborRadius) {
+			centerOfGroup += other.position;
+			count++;
+		}
+	}
+
+	if (count > 0) {
+		centerOfGroup /= static_cast<float>(count);
+		return glm::normalize(centerOfGroup - currentBoid.position);
+	}
+
+	return glm::vec3(0.0f, 0.0f, 0.0f);
+}
+
+
+void updateBoids() {
+	float maxSpeed = 4.0f;
+	float limit = 4.0f;
+	float separationRadius = 1.5f;
+	float alignmentRadius = 3.0f;
+	float cohesionRadius = 2.0f;
+
+	float separationWeight = 1.5f;
+	float alignmentWeight = 1.0f;
+	float cohesionWeight = 1.0f;
+	float avoidanceWeight = 1.5f;
+
+	for (auto& boid : boids) {
+		updateBoundingBox(boid);
+
+		glm::vec3 separationForce = separation(boid, boids, separationRadius) * separationWeight;
+		glm::vec3 alignmentForce = align(boid, boids, alignmentRadius, maxSpeed) * alignmentWeight;
+		glm::vec3 cohesionForce = cohesion(boid, boids, cohesionRadius) * cohesionWeight;
+
+		glm::vec3 avoidanceForce = chcekColisionBoidsWithObstacles(boid, obstacles) * avoidanceWeight;
+
+
+
+		
+		//boid.velocity += (separationForce + alignmentForce + cohesionForce) * deltaTime;
+		boid.velocity += (separationForce + alignmentForce + cohesionForce + avoidanceForce) * deltaTime;
+
+		
+		if (glm::length(boid.velocity) > maxSpeed) {
+			boid.velocity = glm::normalize(boid.velocity) * maxSpeed;
+		}
+
+		
+		boid.position += boid.velocity * deltaTime;
+
+		
+		for (int i = 0; i < 3; ++i) {
+			if (boid.position[i] < -limit) {
+				boid.position[i] = -limit;
+				boid.velocity[i] = -boid.velocity[i];
+			}
+			if (boid.position[i] > limit) {
+				boid.position[i] = limit;
+				boid.velocity[i] = -boid.velocity[i];
+			}
+		}
+	}
+}
+
+
 
 void renderScene(GLFWwindow* window)
 {
@@ -351,8 +597,18 @@ void renderScene(GLFWwindow* window)
 	drawObjectPBR(models::materaceContext, glm::mat4(), glm::vec3(0.9f, 0.9f, 0.9f), 0.8f, 0.0f);
 	drawObjectPBR(models::pencilsContext, glm::mat4(), glm::vec3(0.10039f, 0.018356f, 0.001935f), 0.1f, 0.0f);
 	drawObjectPBR(models::planeContext, glm::mat4(), glm::vec3(0.402978f, 0.120509f, 0.057729f), 0.2f, 0.0f);
-	drawObjectPBR(models::roomContext, glm::mat4(), glm::vec3(0.9f, 0.9f, 0.9f), 0.8f, 0.0f);
+
+
+	glm::vec3 objectPosition(0.0f, 0.0f, 0.0f);
+
+	// Renderowanie obiektu w tej pozycji
+	glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), objectPosition);
+	drawObjectPBR(models::roomContext, modelMatrix, glm::vec3(0.9f, 0.9f, 0.9f), 0.8f, 0.0f);
+	//addObstacle(objectPosition, 1000.0f);
+
 	drawObjectPBR(models::windowContext, glm::mat4(), glm::vec3(0.402978f, 0.120509f, 0.057729f), 0.2f, 0.0f);
+
+	
 
 	glm::vec3 spaceshipSide = glm::normalize(glm::cross(spaceshipDir, glm::vec3(0.f, 1.f, 0.f)));
 	glm::vec3 spaceshipUp = glm::normalize(glm::cross(spaceshipSide, spaceshipDir));
@@ -385,6 +641,36 @@ void renderScene(GLFWwindow* window)
 	//glActiveTexture(GL_TEXTURE0);
 	//glBindTexture(GL_TEXTURE_2D, depthMap);
 	//Core::DrawContext(models::testContext);
+
+
+	//for (const auto& obstacle : obstacles) {
+	//	glm::mat4 model = glm::translate(glm::mat4(1.0f), obstacle.position);
+	//	model = glm::scale(model, glm::vec3(3.0f));
+
+	//	drawObjectTexture(models::bedContext, model, texture::chair, programTex, texture::chair_map);
+	//}
+
+
+
+	for (const auto& boid : boids) {
+
+		glm::mat4 model = glm::translate(glm::mat4(1.0f), boid.position);
+		model = glm::scale(model, glm::vec3(0.3f));
+		if (boid.groupId == 0)
+		{
+			drawObjectTexture(birdContext, model, texture::bird1, programTex, texture::bird1_map);
+		}
+		else if (boid.groupId == 1)
+		{
+			drawObjectTexture(birdContext, model, texture::bird2, programTex, texture::bird2_map);
+		}
+		else if (boid.groupId == 2)
+		{
+			drawObjectTexture(birdContext, model, texture::bird3, programTex, texture::bird3_map);
+		}
+	}
+
+	updateBoids();
 
 	glUseProgram(0);
 	glfwSwapBuffers(window);
@@ -442,6 +728,7 @@ void init(GLFWwindow* window)
 	loadModelToContext("./models/sphere.obj", models::sphereContext);
 	loadModelToContext("./models/window.obj", models::windowContext);
 	loadModelToContext("./models/test.obj", models::testContext);
+	loadModelToContext("./models/bird.obj", birdContext);
 
 	texture::earth = Core::LoadTexture("textures/earth.png");
 	texture::earth_map = Core::LoadTexture("textures/earth_normalmap.png");
@@ -451,6 +738,15 @@ void init(GLFWwindow* window)
 	texture::chair_map = Core::LoadTexture("textures/green_rough_planks_nor_gl_4k.png");
 	texture::table = Core::LoadTexture("textures/wood_table_001_diff_4k.jpg");
 	texture::table_map = Core::LoadTexture("textures/wood_table_001_nor_gl_4k.png");
+	texture::bird1 = Core::LoadTexture("textures/bird1.png");
+	texture::bird1_map = Core::LoadTexture("textures/bird1_normal.png");
+	texture::bird2 = Core::LoadTexture("textures/bird2.png");
+	texture::bird2_map = Core::LoadTexture("textures/bird2_normal.png");
+	texture::bird3 = Core::LoadTexture("textures/bird3.png");
+	texture::bird3_map = Core::LoadTexture("textures/bird3_normal.png");
+
+	initBoids(50);
+	initObstacles(1);
 
 }
 
