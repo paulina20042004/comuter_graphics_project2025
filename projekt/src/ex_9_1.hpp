@@ -107,6 +107,8 @@ float spotlightPhi = 3.14 / 4;
 
 GLuint programDepth;
 bool shadowsEnabled = true;
+bool boidsPause = false;
+
 
 float lastTime = -1.f;
 float deltaTime = 0.f;
@@ -341,7 +343,7 @@ void renderShadowmapSun() {
 		glm::mat4 model = glm::translate(glm::mat4(1.0f), boid.position);
 		model = glm::scale(model, glm::vec3(0.3f));
 
-		// Rysowanie boidów (obiektów 3D)
+		// Rysowanie boidów 
 		if (boid.groupId == 0) {
 			drawObjectDepth(birdContext, lightVP, model);
 		}
@@ -395,20 +397,8 @@ glm::vec3 chcekColisionBoidsWithObstacles(const Boid& self, const std::vector<Ob
 			if (distance > 0.0f) {
 				avoidanceVector += glm::normalize(difference) / distance;
 			}
-
-			//std::cout << "Kolizja! Ptak na pozycji: ("
-			//	<< self.position.x << ", " << self.position.y << ", " << self.position.z
-			//	<< "), przeszkoda na pozycji: ("
-			//	<< obstacle.position.x << ", " << obstacle.position.y << ", " << obstacle.position.z
-			//	<< ")" << std::endl;
 		}
 	}
-
-	//if (!collisionDetected) {
-	//	std::cout << "Brak kolizji. Ptak na pozycji: ("
-	//		<< self.position.x << ", " << self.position.y << ", " << self.position.z
-	//		<< ")" << std::endl;
-	//}
 
 	return avoidanceVector;
 }
@@ -425,8 +415,8 @@ void initBoids(int numBoids) {
 	for (int i = 0; i < numBoids; ++i) {
 		Boid newBoid;
 
-		newBoid.position = glm::vec3(rand() % 50 - 25, rand() % 50 - 25, rand() % 50 - 25);
-		newBoid.velocity = glm::vec3(rand() % 2 - 1, rand() % 2 - 1, rand() % 2 - 1);
+		newBoid.position = glm::vec3(rand() % 50 - 25, rand() % 50 - 25, rand() % 50 - 25); // -25 do 24.
+		newBoid.velocity = glm::vec3(rand() % 2 - 1, rand() % 2 - 1, rand() % 2 - 1);// od -1 do 1
 		newBoid.groupId = i % 3;
 
 		newBoid.boundingBox = AABB(
@@ -445,7 +435,6 @@ void initBoids(int numBoids) {
 void addObstacle(glm::vec3 position, Core::RenderContext& context, std::string path) {
 	std::pair<glm::vec3, glm::vec3> minMax = getMinMaxPosition(path, context);
 
-	// Obliczenie rozmiaru modelu w każdej osi (połowa rozmiaru)
 	float modelSizeX = (minMax.second.x - minMax.first.x) / 2.0f;
 	float modelSizeY = (minMax.second.y - minMax.first.y) / 2.0f;
 	float modelSizeZ = (minMax.second.z - minMax.first.z) / 2.0f;
@@ -453,12 +442,10 @@ void addObstacle(glm::vec3 position, Core::RenderContext& context, std::string p
 	Obstacle newObstacle;
 	newObstacle.position = position;
 
-	// Obliczenie przesunięcia modelu (odległość od środka)
 	float offsetX = minMax.first.x + modelSizeX - position.x;
 	float offsetY = minMax.first.y + modelSizeY - position.y;
 	float offsetZ = minMax.first.z + modelSizeZ - position.z;
 
-	// Tworzenie pudełka ograniczającego (AABB) z uwzględnieniem przesunięcia
 	newObstacle.boundingBox = AABB(
 		position.x - modelSizeX + offsetX, 
 		position.y - modelSizeY + offsetY,
@@ -470,7 +457,6 @@ void addObstacle(glm::vec3 position, Core::RenderContext& context, std::string p
 
 	obstacles.push_back(newObstacle);
 }
-
 
 glm::vec3 separation(const Boid& self, const std::vector<Boid>& boids, float separationRadius) {
 	glm::vec3 avoidVector(0.0f, 0.0f, 0.0f);
@@ -547,6 +533,13 @@ glm::vec3 cohesion(const Boid& currentBoid, const std::vector<Boid>& boids, floa
 
 void updateBoids() {
 	float maxSpeed = 4.0f;
+	if (boidsPause) {
+		maxSpeed = 0.0f;
+	}
+	else {
+		maxSpeed = 4.0f;
+	}
+	
 	float limit = 4.0f;
 	float separationRadius = 1.5f;
 	float alignmentRadius = 3.0f;
@@ -558,28 +551,19 @@ void updateBoids() {
 	float avoidanceWeight = 40.0f;//1.5f;
 
 	for (auto& boid : boids) {
-		/*updateBoundingBox(boid);
-		drawBoundingBox(boid.boundingBox);*/
 		glm::vec3 separationForce = separation(boid, boids, separationRadius) * separationWeight;
 		glm::vec3 alignmentForce = align(boid, boids, alignmentRadius, maxSpeed) * alignmentWeight;
 		glm::vec3 cohesionForce = cohesion(boid, boids, cohesionRadius) * cohesionWeight;
-
 		glm::vec3 avoidanceForce = chcekColisionBoidsWithObstacles(boid, obstacles) * avoidanceWeight;
 
-
-
-		
-		//boid.velocity += (separationForce + alignmentForce + cohesionForce) * deltaTime;
 		boid.velocity += (separationForce + alignmentForce + cohesionForce + avoidanceForce) * deltaTime;
 
-		
 		if (glm::length(boid.velocity) > maxSpeed) {
 			boid.velocity = glm::normalize(boid.velocity) * maxSpeed;
 		}
 
-		
 		boid.position += boid.velocity * deltaTime;
-		
+
 		for (int i = 0; i < 3; ++i) {
 			if (boid.position[i] < -limit) {
 				boid.position[i] = -limit;
@@ -592,6 +576,8 @@ void updateBoids() {
 		}
 	}
 }
+
+
 
 
 /* terrain generation */
@@ -868,38 +854,12 @@ void renderScene(GLFWwindow* window)
 	//glBindTexture(GL_TEXTURE_2D, depthMap);
 	//Core::DrawContext(models::testContext);
 
-
-	//for (const auto& obstacle : obstacles) {
-	//	glm::mat4 model = glm::translate(glm::mat4(1.0f), obstacle.position);
-	//	model = glm::scale(model, glm::vec3(3.0f));
-
-	//	drawObjectTexture(models::bedContext, model, texture::chair, programTex, texture::chair_map);
-	//}
-
-
-
-	//for (const auto& boid : boids) {
-
-	//	glm::mat4 model = glm::translate(glm::mat4(1.0f), boid.position);
-	//	model = glm::scale(model, glm::vec3(0.3f));
-	//	if (boid.groupId == 0)
-	//	{
-	//		drawObjectTexture(birdContext, model, texture::bird1, programTex, texture::bird1_map);
-	//	}
-	//	else if (boid.groupId == 1)
-	//	{
-	//		drawObjectTexture(birdContext, model, texture::bird2, programTex, texture::bird2_map);
-	//	}
-	//	else if (boid.groupId == 2)
-	//	{
-	//		drawObjectTexture(birdContext, model, texture::bird3, programTex, texture::bird3_map);
-	//	}
-
-	//}
-	//updateBoids();
 	for (auto& boid : boids) {
+	
+
 		glm::mat4 model = glm::translate(glm::mat4(1.0f), boid.position);
 		model = glm::scale(model, glm::vec3(0.3f));
+		//model = glm::rotate(model, angleXY, glm::vec3(0.0f, 1.0f, 0.0f));
 
 		// Rysowanie boidów (obiektów 3D)
 		if (boid.groupId == 0) {
@@ -913,10 +873,12 @@ void renderScene(GLFWwindow* window)
 		}
 
 		// Teraz rysowanie AABB
-		updateBoundingBox(boid);   // Zaktualizuj AABB
+		updateBoundingBox(boid);  
 	}
 
-	updateBoids();  // Aktualizacja boidów, wywoływana po rysowaniu
+	updateBoids();
+	 
+	
 
 	glUseProgram(0);
 	glfwSwapBuffers(window);
@@ -1047,8 +1009,14 @@ void processInput(GLFWwindow* window)
 	if (glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS)
 	{
 		shadowsEnabled = false;
-
 	}
+	if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
+		boidsPause = true;
+	}
+	if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS) {
+		boidsPause = false;
+	}
+
 
 	cameraPos = spaceshipPos - 0.5 * spaceshipDir + glm::vec3(0, 1, 0) * 0.2f;
 	cameraDir = spaceshipDir;
