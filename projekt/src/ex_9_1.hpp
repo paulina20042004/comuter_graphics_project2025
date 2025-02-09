@@ -138,9 +138,6 @@ struct Obstacle {
 		: position(0.0f, 0.0f, 0.0f), boundingBox(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f) {}
 };
 
-
-
-
 void updateDeltaTime(float time) {
 	if (lastTime < 0) {
 		lastTime = time;
@@ -360,11 +357,17 @@ void renderShadowmapSun() {
 	glViewport(0, 0, WIDTH, HEIGHT);
 }
 
+std::pair<glm::vec3, glm::vec3> getMinMaxPosition(std::string path, Core::RenderContext& context) {
+	return { context.minVertexPos, context.maxVertexPos };
+}
 
 void updateBoundingBox(Boid& boid) {
-	float modelSizeX = (0.663186f - (-0.663186f)) / 2.0f;
-	float modelSizeY = (0.187214f - (-0.12569f)) / 2.0f;
-	float modelSizeZ = (0.137388f - (-0.262491f)) / 2.0f;
+	std::pair<glm::vec3, glm::vec3> minMax = getMinMaxPosition("./models/bird.obj", birdContext);
+
+	float modelSizeX = (minMax.second.x - minMax.first.x) / 2.0f;
+	float modelSizeY = (minMax.second.y - minMax.first.y) / 2.0f;
+	float modelSizeZ = (minMax.second.z - minMax.first.z) / 2.0f;
+
 	boid.boundingBox = AABB(boid.position.x - modelSizeX,
 		boid.position.y - modelSizeY,
 		boid.position.z - modelSizeZ,
@@ -372,25 +375,6 @@ void updateBoundingBox(Boid& boid) {
 		boid.position.y + modelSizeY,
 		boid.position.z + modelSizeZ);
 }
-
-void drawBoundingBox(const AABB& box) {
-	glBegin(GL_LINE_LOOP);  
-	glColor3f(1.0f, 0.0f, 0.0f); 
-
-	glVertex3f(box.xMin, box.yMin, box.zMin);
-	glVertex3f(box.xMax, box.yMin, box.zMin);
-	glVertex3f(box.xMax, box.yMax, box.zMin);
-	glVertex3f(box.xMin, box.yMax, box.zMin);
-
-	glVertex3f(box.xMin, box.yMin, box.zMax);
-	glVertex3f(box.xMax, box.yMin, box.zMax);
-	glVertex3f(box.xMax, box.yMax, box.zMax);
-	glVertex3f(box.xMin, box.yMax, box.zMax);
-
-	glEnd();
-}
-
-
 
 bool checkCollision(const AABB& box1, const AABB& box2) {
 	return !(box1.xMax < box2.xMin || box1.xMin > box2.xMax ||
@@ -430,55 +414,14 @@ glm::vec3 chcekColisionBoidsWithObstacles(const Boid& self, const std::vector<Ob
 }
 
 
-
-
-std::pair<glm::vec3, glm::vec3> calculateAABB(const std::string& path) {
-	Assimp::Importer import;
-	const aiScene * scene = import.ReadFile(path, aiProcess_Triangulate | aiProcess_CalcTangentSpace);
-
-	if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
-		std::cerr << "ERROR::ASSIMP::" << import.GetErrorString() << std::endl;
-		return { glm::vec3(0.0f), glm::vec3(0.0f) };
-	}
-
-	aiMesh* mesh = scene->mMeshes[0];
-	if (!mesh) {
-		std::cerr << "Mesh is nullptr!" << std::endl;
-		return { glm::vec3(0.0f), glm::vec3(0.0f) };
-	}
-
-	glm::vec3 minPoint(std::numeric_limits<float>::max());
-	glm::vec3 maxPoint(std::numeric_limits<float>::lowest());
-
-	// Oblicz AABB
-	for (unsigned int i = 0; i < mesh->mNumVertices; ++i) {
-		aiVector3D vertex = mesh->mVertices[i];
-
-		minPoint.x = std::min(minPoint.x, vertex.x);
-		minPoint.y = std::min(minPoint.y, vertex.y);
-		minPoint.z = std::min(minPoint.z, vertex.z);
-
-		maxPoint.x = std::max(maxPoint.x, vertex.x);
-		maxPoint.y = std::max(maxPoint.y, vertex.y);
-		maxPoint.z = std::max(maxPoint.z, vertex.z);
-	}
-
-	return { minPoint, maxPoint };
-}
-
-
 void initBoids(int numBoids) {
-	std::string path = "./models/bird.obj";
-	std::pair<glm::vec3, glm::vec3> aabb = calculateAABB(path);
+	std::pair<glm::vec3, glm::vec3> minMax = getMinMaxPosition("./models/bird.obj", birdContext);
 
-	glm::vec3 minPoint = aabb.first;
-	glm::vec3 maxPoint = aabb.second;
+	float modelSizeX = (minMax.second.x - minMax.first.x) / 2.0f;
+	float modelSizeY = (minMax.second.y - minMax.first.y) / 2.0f;
+	float modelSizeZ = (minMax.second.z - minMax.first.z) / 2.0f;
 
-	float modelSizeX = (maxPoint.x - minPoint.x) / 2.0f;
-	float modelSizeY = (maxPoint.y - minPoint.y) / 2.0f;
-	float modelSizeZ = (maxPoint.z - minPoint.z) / 2.0f;
 
-	
 	for (int i = 0; i < numBoids; ++i) {
 		Boid newBoid;
 
@@ -499,44 +442,34 @@ void initBoids(int numBoids) {
 	}
 }
 
+void addObstacle(glm::vec3 position, Core::RenderContext& context, std::string path) {
+	std::pair<glm::vec3, glm::vec3> minMax = getMinMaxPosition(path, context);
 
-void initObstacles(int numObstacles) {
-	glm::vec3 halfSize = glm::vec3(2.0f, 2.5f, 2.5f);  // Połowa rozmiaru modelu
-
-	for (int i = 0; i < numObstacles; ++i) {
-		Obstacle newObstacle;
-		newObstacle.position = glm::vec3(rand() % 10 - 5, rand() % 10 - 5, rand() % 10 - 5);
-
-		// Ustawienie bounding box w oparciu o pozycję przeszkody
-		newObstacle.boundingBox = AABB(
-			newObstacle.position.x - halfSize.x,
-			newObstacle.position.y - halfSize.y,
-			newObstacle.position.z - halfSize.z,
-			newObstacle.position.x + halfSize.x,
-			newObstacle.position.y + halfSize.y,
-			newObstacle.position.z + halfSize.z
-		);
-
-		obstacles.push_back(newObstacle);
-	}
-}
-
-void addObstacle(glm::vec3 position, float range) {
-	glm::vec3 halfSize = glm::vec3(2.0f, 2.5f, 2.5f); // polowa rozmiaru modelu 
+	// Obliczenie rozmiaru modelu w każdej osi (połowa rozmiaru)
+	float modelSizeX = (minMax.second.x - minMax.first.x) / 2.0f;
+	float modelSizeY = (minMax.second.y - minMax.first.y) / 2.0f;
+	float modelSizeZ = (minMax.second.z - minMax.first.z) / 2.0f;
 
 	Obstacle newObstacle;
 	newObstacle.position = position;
+
+	// Obliczenie przesunięcia modelu (odległość od środka)
+	float offsetX = minMax.first.x + modelSizeX - position.x;
+	float offsetY = minMax.first.y + modelSizeY - position.y;
+	float offsetZ = minMax.first.z + modelSizeZ - position.z;
+
+	// Tworzenie pudełka ograniczającego (AABB) z uwzględnieniem przesunięcia
 	newObstacle.boundingBox = AABB(
-		newObstacle.position.x - halfSize.x,
-		newObstacle.position.y - halfSize.y,
-		newObstacle.position.z - halfSize.z,
-		newObstacle.position.x + halfSize.x,
-		newObstacle.position.y + halfSize.y,
-		newObstacle.position.z + halfSize.z
+		position.x - modelSizeX + offsetX, 
+		position.y - modelSizeY + offsetY,
+		position.z - modelSizeZ + offsetZ,
+		position.x + modelSizeX + offsetX, 
+		position.y + modelSizeY + offsetY,
+		position.z + modelSizeZ + offsetZ
 	);
+
 	obstacles.push_back(newObstacle);
 }
-
 
 
 glm::vec3 separation(const Boid& self, const std::vector<Boid>& boids, float separationRadius) {
@@ -622,7 +555,7 @@ void updateBoids() {
 	float separationWeight = 1.5f;
 	float alignmentWeight = 1.0f;
 	float cohesionWeight = 1.0f;
-	float avoidanceWeight = 4.0f;//1.5f;
+	float avoidanceWeight = 40.0f;//1.5f;
 
 	for (auto& boid : boids) {
 		/*updateBoundingBox(boid);
@@ -896,7 +829,8 @@ void renderScene(GLFWwindow* window)
 	// Renderowanie obiektu w tej pozycji
 	glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), objectPosition);
 	drawObjectPBR(models::roomContext, modelMatrix, glm::vec3(0.9f, 0.9f, 0.9f), 0.8f, 0.0f);
-	addObstacle(objectPosition, 1.0f);
+
+	//addObstacle(objectPosition, models::roomContext,"./models/room.obj");
 
 	drawObjectPBR(models::windowContext, glm::mat4(), glm::vec3(0.402978f, 0.120509f, 0.057729f), 0.2f, 0.0f);
 
@@ -980,7 +914,6 @@ void renderScene(GLFWwindow* window)
 
 		// Teraz rysowanie AABB
 		updateBoundingBox(boid);   // Zaktualizuj AABB
-		drawBoundingBox(boid.boundingBox);  // Rysowanie AABB
 	}
 
 	updateBoids();  // Aktualizacja boidów, wywoływana po rysowaniu
@@ -988,6 +921,7 @@ void renderScene(GLFWwindow* window)
 	glUseProgram(0);
 	glfwSwapBuffers(window);
 }
+
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
 	aspectRatio = width / float(height);
@@ -995,6 +929,8 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 	WIDTH = width;
 	HEIGHT = height;
 }
+
+
 void loadModelToContext(std::string path, Core::RenderContext& context)
 {
 	Assimp::Importer import;
@@ -1007,9 +943,6 @@ void loadModelToContext(std::string path, Core::RenderContext& context)
 	}
 	context.initFromAssimpMesh(scene->mMeshes[0]);
 }
-
-
-
 
 
 
@@ -1069,6 +1002,7 @@ void init(GLFWwindow* window)
 	generateTerrain(GRID_SIZE, HEIGHT_SCALE); 
 
 	initBoids(100);
+	addObstacle(glm::vec3(0.0f, 0.0f, 0.0f), models::roomContext, "./models/room.obj");
 	//initObstacles(1);
 
 }

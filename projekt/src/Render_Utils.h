@@ -19,6 +19,12 @@ namespace Core
 
         void initFromOBJ(obj::Model& model);
 
+		//static glm::vec3 minVertexPos;
+		//static glm::vec3 maxVertexPos;
+
+		glm::vec3 minVertexPos;
+		glm::vec3 maxVertexPos;
+
 		void initFromAssimpMesh(aiMesh* mesh);
 	};
 
