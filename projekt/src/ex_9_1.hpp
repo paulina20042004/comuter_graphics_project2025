@@ -4,6 +4,7 @@
 #include "ext.hpp"
 #include <iostream>
 #include <cmath>
+#include <vector>
 
 #include "Shader_Loader.h"
 #include "Render_Utils.h"
@@ -17,6 +18,15 @@
 #include "SOIL/SOIL.h"
 #include <utility>
 #include <limits>
+
+#define AMPLITUDE 150.0f
+#define OCTAVES 4
+#define ROUGHNESS 0.01f
+
+#define GRID_SIZE 250
+#define HEIGHT_SCALE 0.1f
+
+float generateHeight(int x, int z, int seed, int xOffset, int zOffset);
 
 const unsigned int SHADOW_WIDTH = 1024, SHADOW_HEIGHT = 1024;
 
@@ -283,6 +293,9 @@ void drawObjectDepth(Core::RenderContext& context, const glm::mat4& viewProjecti
 	Core::DrawContext(context);
 }
 
+std::vector<Boid> boids;
+std::vector<Obstacle> obstacles;
+
 void renderShadowmapSun() {
 	float time = glfwGetTime();
 
@@ -327,13 +340,26 @@ void renderShadowmapSun() {
 		glm::translate(spaceshipPos) * spaceshipCameraRotationMatrix * glm::eulerAngleY(glm::pi<float>()) * glm::scale(glm::vec3(0.03f))
 	);
 
+	for (auto& boid : boids) {
+		glm::mat4 model = glm::translate(glm::mat4(1.0f), boid.position);
+		model = glm::scale(model, glm::vec3(0.3f));
+
+		// Rysowanie boidów (obiektów 3D)
+		if (boid.groupId == 0) {
+			drawObjectDepth(birdContext, lightVP, model);
+		}
+		else if (boid.groupId == 1) {
+			drawObjectDepth(birdContext, lightVP, model);
+		}
+		else if (boid.groupId == 2) {
+			drawObjectDepth(birdContext, lightVP, model);
+		}
+	}
+
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glViewport(0, 0, WIDTH, HEIGHT);
 }
 
-
-std::vector<Boid> boids;
-std::vector<Obstacle> obstacles;
 
 void updateBoundingBox(Boid& boid) {
 	float modelSizeX = (0.663186f - (-0.663186f)) / 2.0f;
@@ -620,7 +646,6 @@ void updateBoids() {
 
 		
 		boid.position += boid.velocity * deltaTime;
-
 		
 		for (int i = 0; i < 3; ++i) {
 			if (boid.position[i] < -limit) {
@@ -634,6 +659,177 @@ void updateBoids() {
 		}
 	}
 }
+
+
+/* terrain generation */
+
+GLuint terrainVAO, terrainVBO;
+std::vector<float> terrainVertices;
+std::vector<unsigned int> terrainIndices;
+GLuint terrainTexture, terrainTexture_map;
+
+
+// Function to get random noise based on x, z coordinates and seed
+float getNoise(int x, int z, int seed) {
+	srand(x * 49632 + z * 325176 + seed);
+	return (float)(rand()) / (float)(RAND_MAX / 2.0) - 1.0f;
+}
+
+
+// Function to get smooth noise by averaging surrounding values
+float getSmoothNoise(int x, int z, int seed) {
+	float corners = (getNoise(x - 1, z - 1, seed) + getNoise(x + 1, z - 1, seed) + getNoise(x - 1, z + 1, seed) + getNoise(x + 1, z + 1, seed)) / 16.0f;
+	float sides = (getNoise(x - 1, z, seed) + getNoise(x + 1, z, seed) + getNoise(x, z - 1, seed) + getNoise(x, z + 1, seed)) / 8.0f;
+	float center = getNoise(x, z, seed) / 4.0f;
+	return corners + sides + center;
+}
+
+// Function to interpolate between two values using cosine interpolation
+float interpolate(float a, float b, float blend) {
+	float theta = blend * 3.1415927f;
+	float f = (1.0f - cos(theta)) * 0.5f;
+	return a * (1.0f - f) + b * f;
+}
+
+// Function to get interpolated noise for smooth terrain
+float getInterpolatedNoise(float x, float z, int seed, int xOffset, int zOffset) {
+	int intX = (int)x;
+	int intZ = (int)z;
+	float fracX = x - intX;
+	float fracZ = z - intZ;
+
+	float v1 = getSmoothNoise(intX, intZ, seed);
+	float v2 = getSmoothNoise(intX + 1, intZ, seed);
+	float v3 = getSmoothNoise(intX, intZ + 1, seed);
+	float v4 = getSmoothNoise(intX + 1, intZ + 1, seed);
+
+	float i1 = interpolate(v1, v2, fracX);
+	float i2 = interpolate(v3, v4, fracX);
+
+	return interpolate(i1, i2, fracZ);
+}
+
+// Function to generate the height at a specific grid position (x, z)
+float generateHeight(int x, int z, int seed, int xOffset, int zOffset) {
+	float total = 0.0f;
+	float d = std::pow(2, OCTAVES - 1);
+	for (int i = 0; i < OCTAVES; ++i) {
+		float freq = std::pow(2, i) / d;
+		float amp = std::pow(ROUGHNESS, i) * AMPLITUDE;
+		total += getInterpolatedNoise((x + xOffset) * freq, (z + zOffset) * freq, seed, xOffset, zOffset) * amp;
+	}
+	return total;
+}
+
+void generateTerrain(int gridSize, float heightScale) {
+	terrainVertices.clear();
+	terrainIndices.clear();
+
+	float halfSize = gridSize / 2.0f;
+
+	for (int z = 0; z < gridSize; z++) {
+		for (int x = 0; x < gridSize; x++) {
+			float worldX = x - halfSize; 
+			float worldZ = z - halfSize; 
+			//float height = sin(x * 0.1f) * cos(z * 0.1f) * heightScale;
+			float height = generateHeight(x, z, 1, 0, 0) * heightScale;
+
+			// pos
+			terrainVertices.push_back(worldX);
+			terrainVertices.push_back(height);
+			terrainVertices.push_back(worldZ);
+
+			// normal
+			terrainVertices.push_back(0.0f);
+			terrainVertices.push_back(1.0f);
+			terrainVertices.push_back(0.0f);
+
+			// tex
+			float tileScale = 10.0f; 
+
+			terrainVertices.push_back(x * tileScale / (float)gridSize); // U
+			terrainVertices.push_back(z * tileScale / (float)gridSize); // V
+
+
+			// tan, bitan
+			terrainVertices.push_back(1.0f); terrainVertices.push_back(0.0f); terrainVertices.push_back(0.0f); // Tangent
+			terrainVertices.push_back(0.0f); terrainVertices.push_back(0.0f); terrainVertices.push_back(1.0f); // Bitangent
+		}
+	}
+
+	for (int z = 0; z < gridSize - 1; z++) {
+		for (int x = 0; x < gridSize - 1; x++) {
+			int topLeft = z * gridSize + x;
+			int topRight = topLeft + 1;
+			int bottomLeft = (z + 1) * gridSize + x;
+			int bottomRight = bottomLeft + 1;
+
+			terrainIndices.push_back(topLeft);
+			terrainIndices.push_back(bottomLeft);
+			terrainIndices.push_back(topRight);
+
+			terrainIndices.push_back(topRight);
+			terrainIndices.push_back(bottomLeft);
+			terrainIndices.push_back(bottomRight);
+		}
+	}
+
+	glGenVertexArrays(1, &terrainVAO);
+	glGenBuffers(1, &terrainVBO);
+	GLuint terrainEBO;
+	glGenBuffers(1, &terrainEBO);
+
+	glBindVertexArray(terrainVAO);
+
+	glBindBuffer(GL_ARRAY_BUFFER, terrainVBO);
+	glBufferData(GL_ARRAY_BUFFER, terrainVertices.size() * sizeof(float), terrainVertices.data(), GL_STATIC_DRAW);
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, terrainEBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, terrainIndices.size() * sizeof(unsigned int), terrainIndices.data(), GL_STATIC_DRAW);
+
+	// pos
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 14 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+
+	// normal
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 14 * sizeof(float), (void*)(3 * sizeof(float)));
+	glEnableVertexAttribArray(1);
+
+	// tex
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 14 * sizeof(float), (void*)(6 * sizeof(float)));
+	glEnableVertexAttribArray(2);
+
+	// tan
+	glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 14 * sizeof(float), (void*)(8 * sizeof(float)));
+	glEnableVertexAttribArray(3);
+
+	// bitan
+	glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, 14 * sizeof(float), (void*)(11 * sizeof(float)));
+	glEnableVertexAttribArray(4);
+
+	glBindVertexArray(0);
+}
+
+
+
+
+void drawTerrain() {
+	glUseProgram(programTex);
+
+	glm::mat4 modelMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(0.1f));
+	glm::mat4 mvp = createPerspectiveMatrix() * createCameraMatrix() * modelMatrix;
+
+	glUniformMatrix4fv(glGetUniformLocation(programTex, "transformation"), 1, GL_FALSE, &mvp[0][0]);
+
+	Core::SetActiveTexture(terrainTexture, "colorTexture", programTex, 0);
+	Core::SetActiveTexture(terrainTexture_map, "normalSampler", programTex, 1); 
+
+	glBindVertexArray(terrainVAO);
+	glDrawElements(GL_TRIANGLES, terrainIndices.size(), GL_UNSIGNED_INT, 0);
+	glBindVertexArray(0);
+}
+
+
 
 
 
@@ -662,7 +858,7 @@ void renderScene(GLFWwindow* window)
 	Core::DrawContext(sphereContext);
 
 	glUseProgram(programTex);
-
+	drawTerrain();
 	drawObjectTexture(sphereContext, glm::translate(pointlightPos) * glm::scale(glm::vec3(0.1)) * glm::eulerAngleY(time / 3) * glm::translate(glm::vec3(4.f, 0, 0)) * glm::scale(glm::vec3(0.3f)),
 		texture::earth, programTex, texture::earth_map);
 
@@ -789,7 +985,6 @@ void renderScene(GLFWwindow* window)
 
 	updateBoids();  // Aktualizacja boidów, wywoływana po rysowaniu
 
-
 	glUseProgram(0);
 	glfwSwapBuffers(window);
 }
@@ -867,6 +1062,11 @@ void init(GLFWwindow* window)
 	texture::bird2_map = Core::LoadTexture("textures/bird2_normal.png");
 	texture::bird3 = Core::LoadTexture("textures/bird3.png");
 	texture::bird3_map = Core::LoadTexture("textures/bird3_normal.png");
+	
+	terrainTexture = Core::LoadTexture("textures/grass1.png");
+	terrainTexture_map = Core::LoadTexture("textures/grass1_normal.png");
+
+	generateTerrain(GRID_SIZE, HEIGHT_SCALE); 
 
 	initBoids(100);
 	//initObstacles(1);
