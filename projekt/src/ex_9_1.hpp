@@ -19,14 +19,21 @@
 #include <utility>
 #include <limits>
 
-#define AMPLITUDE 150.0f
+#define AMPLITUDE 50.0f
 #define OCTAVES 4
-#define ROUGHNESS 0.01f
+#define ROUGHNESS 0.21f
 
-#define GRID_SIZE 250
+#define GRID_SIZE 25
 #define HEIGHT_SCALE 0.1f
 
 float generateHeight(int x, int z, int seed, int xOffset, int zOffset);
+float getTerrainHeight(float x, float z);
+std::vector<glm::vec3> treePositions;
+
+GLuint skyboxVAO, skyboxVBO;
+GLuint skyboxShader;
+GLuint cubemapTexture;
+
 
 const unsigned int SHADOW_WIDTH = 1024, SHADOW_HEIGHT = 1024;
 
@@ -47,6 +54,7 @@ namespace models {
 	Core::RenderContext sphereContext;
 	Core::RenderContext windowContext;
 	Core::RenderContext testContext;
+	Core::RenderContext treeContext;
 }
 
 namespace texture {
@@ -82,7 +90,7 @@ Core::RenderContext birdContext;
 
 glm::vec3 sunPos = glm::vec3(-4.740971f, 2.149999f, 0.369280f);
 glm::vec3 sunDir = glm::vec3(-0.93633f, 0.351106, 0.003226f);
-glm::vec3 sunColor = glm::vec3(0.9f, 0.9f, 0.7f)*5;
+glm::vec3 sunColor = glm::vec3(0.9f, 0.9f, 0.7f) * 5;
 
 glm::vec3 cameraPos = glm::vec3(0.479490f, 1.250000f, -2.124680f);
 glm::vec3 cameraDir = glm::vec3(-0.354510f, 0.000000f, 0.935054f);
@@ -90,7 +98,7 @@ glm::vec3 cameraDir = glm::vec3(-0.354510f, 0.000000f, 0.935054f);
 
 glm::vec3 spaceshipPos = glm::vec3(0.065808f, 1.250000f, -2.189549f);
 glm::vec3 spaceshipDir = glm::vec3(-0.490263f, 0.000000f, 0.871578f);
-GLuint VAO,VBO;
+GLuint VAO, VBO;
 
 float aspectRatio = 1.f;
 
@@ -101,7 +109,7 @@ glm::vec3 pointlightColor = glm::vec3(0.9, 0.6, 0.6);
 
 glm::vec3 spotlightPos = glm::vec3(0, 0, 0);
 glm::vec3 spotlightConeDir = glm::vec3(0, 0, 0);
-glm::vec3 spotlightColor = glm::vec3(0.4, 0.4, 0.9)*3;
+glm::vec3 spotlightColor = glm::vec3(0.4, 0.4, 0.9) * 3;
 float spotlightPhi = 3.14 / 4;
 
 
@@ -152,8 +160,8 @@ void updateDeltaTime(float time) {
 }
 glm::mat4 createCameraMatrix()
 {
-	glm::vec3 cameraSide = glm::normalize(glm::cross(cameraDir,glm::vec3(0.f,1.f,0.f)));
-	glm::vec3 cameraUp = glm::normalize(glm::cross(cameraSide,cameraDir));
+	glm::vec3 cameraSide = glm::normalize(glm::cross(cameraDir, glm::vec3(0.f, 1.f, 0.f)));
+	glm::vec3 cameraUp = glm::normalize(glm::cross(cameraSide, cameraDir));
 	glm::mat4 cameraRotrationMatrix = glm::mat4({
 		cameraSide.x,cameraSide.y,cameraSide.z,0,
 		cameraUp.x,cameraUp.y,cameraUp.z ,0,
@@ -168,7 +176,7 @@ glm::mat4 createCameraMatrix()
 
 glm::mat4 createPerspectiveMatrix()
 {
-	
+
 	glm::mat4 perspectiveMatrix;
 	float n = 0.05;
 	float f = 20.;
@@ -177,15 +185,119 @@ glm::mat4 createPerspectiveMatrix()
 	perspectiveMatrix = glm::mat4({
 		1,0.,0.,0.,
 		0.,aspectRatio,0.,0.,
-		0.,0.,(f+n) / (n - f),2*f * n / (n - f),
+		0.,0.,(f + n) / (n - f),2 * f * n / (n - f),
 		0.,0.,-1.,0.,
 		});
 
-	
-	perspectiveMatrix=glm::transpose(perspectiveMatrix);
+
+	perspectiveMatrix = glm::transpose(perspectiveMatrix);
 
 	return perspectiveMatrix;
 }
+
+float skyboxVertices[] = {
+	// Front
+	-1.0f,  1.0f, -1.0f,
+	-1.0f, -1.0f, -1.0f,
+	 1.0f, -1.0f, -1.0f,
+	 1.0f, -1.0f, -1.0f,
+	 1.0f,  1.0f, -1.0f,
+	-1.0f,  1.0f, -1.0f,
+
+	// Back
+	-1.0f, -1.0f,  1.0f,
+	-1.0f,  1.0f,  1.0f,
+	 1.0f,  1.0f,  1.0f,
+	 1.0f,  1.0f,  1.0f,
+	 1.0f, -1.0f,  1.0f,
+	-1.0f, -1.0f,  1.0f,
+
+	// Left 
+	-1.0f,  1.0f,  1.0f,
+	-1.0f,  1.0f, -1.0f,
+	-1.0f, -1.0f, -1.0f,
+	-1.0f, -1.0f, -1.0f,
+	-1.0f, -1.0f,  1.0f,
+	-1.0f,  1.0f,  1.0f,
+
+	// Right 
+	1.0f,  1.0f, -1.0f,
+	1.0f,  1.0f,  1.0f,
+	1.0f, -1.0f,  1.0f,
+	1.0f, -1.0f,  1.0f,
+	1.0f, -1.0f, -1.0f,
+	1.0f,  1.0f, -1.0f,
+
+
+	 // Bottom
+	 -1.0f, -1.0f, -1.0f,
+	  1.0f, -1.0f, -1.0f,
+	  1.0f, -1.0f,  1.0f,
+	  1.0f, -1.0f,  1.0f,
+	 -1.0f, -1.0f,  1.0f,
+	 -1.0f, -1.0f, -1.0f,
+
+	 // Top
+	 -1.0f,  1.0f,  1.0f,
+	  1.0f,  1.0f,  1.0f,
+	  1.0f,  1.0f, -1.0f,
+	  1.0f,  1.0f, -1.0f,
+	 -1.0f,  1.0f, -1.0f,
+	 -1.0f,  1.0f,  1.0f
+};
+
+
+GLuint loadCubemap(std::vector<std::string> faces) {
+	GLuint textureID;
+	glGenTextures(1, &textureID);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
+
+	int width, height;
+	unsigned char* image;
+	for (GLuint i = 0; i < faces.size(); i++) {
+		image = SOIL_load_image(faces[i].c_str(), &width, &height, 0, SOIL_LOAD_RGB);
+		if (image) {
+			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
+			SOIL_free_image_data(image);
+		}
+		else {
+			std::cerr << "Błąd ładowania Skyboxa: " << faces[i] << std::endl;
+		}
+	}
+
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+	return textureID;
+}
+
+
+void initSkybox() {
+	glGenVertexArrays(1, &skyboxVAO);
+	glGenBuffers(1, &skyboxVBO);
+	glBindVertexArray(skyboxVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+	glBindVertexArray(0);
+
+	std::vector<std::string> faces = {
+		"textures/skybox/right.png",
+		"textures/skybox/left.png",
+		"textures/skybox/top.png",
+		"textures/skybox/bottom.png",
+		"textures/skybox/front.png",
+		"textures/skybox/back.png"
+	};
+	cubemapTexture = loadCubemap(faces);
+
+	skyboxShader = shaderLoader.CreateProgram("shaders/skybox.vert", "shaders/skybox.frag");
+}
+
 
 void drawObjectPBR(Core::RenderContext& context, glm::mat4 modelMatrix, glm::vec3 color, float roughness, float metallic) {
 
@@ -214,7 +326,7 @@ void drawObjectPBR(Core::RenderContext& context, glm::mat4 modelMatrix, glm::vec
 	glUniform3f(glGetUniformLocation(program, "spotlightColor"), spotlightColor.x, spotlightColor.y, spotlightColor.z);
 	glUniform1f(glGetUniformLocation(program, "spotlightPhi"), spotlightPhi);
 	glUniform1i(glGetUniformLocation(program, "shadowsEnabled"), shadowsEnabled);
-	
+
 
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, depthMap);  // powiązanie tekstury depthMap z jednostką tekstury 0
@@ -223,8 +335,8 @@ void drawObjectPBR(Core::RenderContext& context, glm::mat4 modelMatrix, glm::vec
 	glm::mat4 LightVP = glm::ortho(-1.f, 1.f, -1.f, 1.f, 1.0f, 30.0f) * glm::lookAt(sunPos, sunPos - sunDir, glm::vec3(0, 1, 0));
 	glUniformMatrix4fv(glGetUniformLocation(program, "LightVP"), 1, GL_FALSE, (float*)&LightVP);
 
-	
-	
+
+
 	Core::DrawContext(context);
 
 }
@@ -339,6 +451,12 @@ void renderShadowmapSun() {
 		glm::translate(spaceshipPos) * spaceshipCameraRotationMatrix * glm::eulerAngleY(glm::pi<float>()) * glm::scale(glm::vec3(0.03f))
 	);
 
+	for (auto& pos : treePositions) {
+		glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), pos)/* * glm::scale(glm::mat4(1.0f), glm::vec3(0.3f))*/;
+		drawObjectDepth(models::treeContext, lightVP, modelMatrix);
+	}
+
+
 	for (auto& boid : boids) {
 		glm::mat4 model = glm::translate(glm::mat4(1.0f), boid.position);
 		model = glm::scale(model, glm::vec3(0.3f));
@@ -447,10 +565,10 @@ void addObstacle(glm::vec3 position, Core::RenderContext& context, std::string p
 	float offsetZ = minMax.first.z + modelSizeZ - position.z;
 
 	newObstacle.boundingBox = AABB(
-		position.x - modelSizeX + offsetX, 
+		position.x - modelSizeX + offsetX,
 		position.y - modelSizeY + offsetY,
 		position.z - modelSizeZ + offsetZ,
-		position.x + modelSizeX + offsetX, 
+		position.x + modelSizeX + offsetX,
 		position.y + modelSizeY + offsetY,
 		position.z + modelSizeZ + offsetZ
 	);
@@ -539,7 +657,7 @@ void updateBoids() {
 	else {
 		maxSpeed = 4.0f;
 	}
-	
+
 	float limit = 4.0f;
 	float separationRadius = 1.5f;
 	float alignmentRadius = 3.0f;
@@ -563,6 +681,14 @@ void updateBoids() {
 		}
 
 		boid.position += boid.velocity * deltaTime;
+
+		// collision with terrain
+		float terrainHeight = getTerrainHeight(boid.position.x, boid.position.z);
+
+		if (boid.position.y < terrainHeight) {
+			boid.position.y = terrainHeight;  
+			boid.velocity.y = std::abs(boid.velocity.y) * 0.5f; 
+		}
 
 		for (int i = 0; i < 3; ++i) {
 			if (boid.position[i] < -limit) {
@@ -588,14 +714,14 @@ std::vector<unsigned int> terrainIndices;
 GLuint terrainTexture, terrainTexture_map;
 
 
-// Function to get random noise based on x, z coordinates and seed
+// random noise based on x, z coordinates and seed
 float getNoise(int x, int z, int seed) {
 	srand(x * 49632 + z * 325176 + seed);
 	return (float)(rand()) / (float)(RAND_MAX / 2.0) - 1.0f;
 }
 
 
-// Function to get smooth noise by averaging surrounding values
+// smooth noise by averaging surrounding values
 float getSmoothNoise(int x, int z, int seed) {
 	float corners = (getNoise(x - 1, z - 1, seed) + getNoise(x + 1, z - 1, seed) + getNoise(x - 1, z + 1, seed) + getNoise(x + 1, z + 1, seed)) / 16.0f;
 	float sides = (getNoise(x - 1, z, seed) + getNoise(x + 1, z, seed) + getNoise(x, z - 1, seed) + getNoise(x, z + 1, seed)) / 8.0f;
@@ -603,14 +729,14 @@ float getSmoothNoise(int x, int z, int seed) {
 	return corners + sides + center;
 }
 
-// Function to interpolate between two values using cosine interpolation
+// cosine interpolation
 float interpolate(float a, float b, float blend) {
 	float theta = blend * 3.1415927f;
 	float f = (1.0f - cos(theta)) * 0.5f;
 	return a * (1.0f - f) + b * f;
 }
 
-// Function to get interpolated noise for smooth terrain
+// interpolated noise for smooth terrain
 float getInterpolatedNoise(float x, float z, int seed, int xOffset, int zOffset) {
 	int intX = (int)x;
 	int intZ = (int)z;
@@ -628,7 +754,7 @@ float getInterpolatedNoise(float x, float z, int seed, int xOffset, int zOffset)
 	return interpolate(i1, i2, fracZ);
 }
 
-// Function to generate the height at a specific grid position (x, z)
+// generate the height at a specific grid position (x, z)
 float generateHeight(int x, int z, int seed, int xOffset, int zOffset) {
 	float total = 0.0f;
 	float d = std::pow(2, OCTAVES - 1);
@@ -646,12 +772,15 @@ void generateTerrain(int gridSize, float heightScale) {
 
 	float halfSize = gridSize / 2.0f;
 
-	for (int z = 0; z < gridSize; z++) {
-		for (int x = 0; x < gridSize; x++) {
-			float worldX = x - halfSize; 
-			float worldZ = z - halfSize; 
-			//float height = sin(x * 0.1f) * cos(z * 0.1f) * heightScale;
-			float height = generateHeight(x, z, 1, 0, 0) * heightScale;
+	for (int z = -halfSize; z < halfSize; z++) {
+		for (int x = -halfSize; x < halfSize; x++) {
+			float worldX = x;
+			float worldZ = z;
+			//float height = generateHeight(x, z, 1, 0, 0) * heightScale;
+			float height = floor(generateHeight(x, z, 1, 0, 0) * heightScale);
+
+			//std::cout << "Terrain at (" << x << ", " << z << ") height: " << height << std::endl;
+			//std::cout << "	calculated (" << x + halfSize << ", " << z + halfSize << ") height: " << height << std::endl;
 
 			// pos
 			terrainVertices.push_back(worldX);
@@ -664,7 +793,7 @@ void generateTerrain(int gridSize, float heightScale) {
 			terrainVertices.push_back(0.0f);
 
 			// tex
-			float tileScale = 10.0f; 
+			float tileScale = 10.0f;
 
 			terrainVertices.push_back(x * tileScale / (float)gridSize); // U
 			terrainVertices.push_back(z * tileScale / (float)gridSize); // V
@@ -729,19 +858,77 @@ void generateTerrain(int gridSize, float heightScale) {
 	glBindVertexArray(0);
 }
 
+void generateTrees(int numTrees, int gridSize) {
+	treePositions.clear();
+	int halfSize = gridSize / 2;
 
+	for (int i = 0; i < numTrees; i++) {
+		float x = (rand() % gridSize) - halfSize;
+		float z = (rand() % gridSize) - halfSize;
+		int closestX = round(x) + halfSize;
+		int closestZ = round(z) + halfSize;
+		float y;
+
+		closestX = std::max(0, std::min(closestX, GRID_SIZE - 1));
+		closestZ = std::max(0, std::min(closestZ, GRID_SIZE - 1));
+
+		int index = (closestZ * GRID_SIZE + closestX) * 14 + 1;
+
+		if (index >= 0 && index < terrainVertices.size()) {
+			y = terrainVertices[index];
+		}
+		else {
+			std::cerr << "Błąd: indeks " << index << " poza zakresem terrainVertices!" << std::endl;
+			y = 0;
+		}
+
+		glm::vec3 treePos(x, y, z);
+		treePositions.push_back(treePos);
+
+		// AABB obstacle
+		float treeSize = 3.3f;  
+		Obstacle treeObstacle;
+		treeObstacle.position = treePos;
+		treeObstacle.boundingBox = AABB(
+			treePos.x - treeSize, treePos.y, treePos.z - treeSize,
+			treePos.x + treeSize, treePos.y + 10.0f, treePos.z + treeSize 
+		);
+
+		obstacles.push_back(treeObstacle);
+	}
+}
+
+
+float getTerrainHeight(float x, float z) {
+	int halfSize = GRID_SIZE / 2;
+	int closestX = round(x) + halfSize;
+	int closestZ = round(z) + halfSize;
+
+	closestX = std::max(0, std::min(closestX, GRID_SIZE - 1));
+	closestZ = std::max(0, std::min(closestZ, GRID_SIZE - 1));
+
+	int index = (closestZ * GRID_SIZE + closestX) * 14 + 1;
+
+	if (index >= 0 && index < terrainVertices.size()) {
+		return terrainVertices[index];
+	}
+	else {
+		std::cerr << "Błąd: indeks " << index << " poza zakresem terrainVertices!" << std::endl;
+		return 0; 
+	}
+}
 
 
 void drawTerrain() {
 	glUseProgram(programTex);
 
-	glm::mat4 modelMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(0.1f));
+	glm::mat4 modelMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f));
 	glm::mat4 mvp = createPerspectiveMatrix() * createCameraMatrix() * modelMatrix;
 
 	glUniformMatrix4fv(glGetUniformLocation(programTex, "transformation"), 1, GL_FALSE, &mvp[0][0]);
 
 	Core::SetActiveTexture(terrainTexture, "colorTexture", programTex, 0);
-	Core::SetActiveTexture(terrainTexture_map, "normalSampler", programTex, 1); 
+	Core::SetActiveTexture(terrainTexture_map, "normalSampler", programTex, 1);
 
 	glBindVertexArray(terrainVAO);
 	glDrawElements(GL_TRIANGLES, terrainIndices.size(), GL_UNSIGNED_INT, 0);
@@ -765,6 +952,23 @@ void renderScene(GLFWwindow* window)
 	{
 		renderShadowmapSun();
 	}
+
+	glDepthFunc(GL_LEQUAL);
+	glUseProgram(skyboxShader);
+
+	glm::mat4 view = glm::mat4(glm::mat3(createCameraMatrix())); // Usunięcie translacji kamery
+	glm::mat4 projection = createPerspectiveMatrix();
+
+	glUniformMatrix4fv(glGetUniformLocation(skyboxShader, "view"), 1, GL_FALSE, glm::value_ptr(view));
+	glUniformMatrix4fv(glGetUniformLocation(skyboxShader, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+
+	glBindVertexArray(skyboxVAO);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+	glDrawArrays(GL_TRIANGLES, 0, 36);
+	glBindVertexArray(0);
+
+	glDepthFunc(GL_LESS);
+
 
 
 	//space lamp
@@ -820,7 +1024,11 @@ void renderScene(GLFWwindow* window)
 
 	drawObjectPBR(models::windowContext, glm::mat4(), glm::vec3(0.402978f, 0.120509f, 0.057729f), 0.2f, 0.0f);
 
-	
+	for (auto& pos : treePositions) {
+		glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), pos) * glm::scale(glm::mat4(1.0f), glm::vec3(0.3f));
+
+		drawObjectPBR(models::treeContext, modelMatrix, glm::vec3(0.3f, 0.3f, 0.3f), 0.0f, 1.0f);
+	}
 
 	glm::vec3 spaceshipSide = glm::normalize(glm::cross(spaceshipDir, glm::vec3(0.f, 1.f, 0.f)));
 	glm::vec3 spaceshipUp = glm::normalize(glm::cross(spaceshipSide, spaceshipDir));
@@ -839,7 +1047,7 @@ void renderScene(GLFWwindow* window)
 	drawObjectPBR(shipContext,
 		glm::translate(spaceshipPos) * specshipCameraRotrationMatrix * glm::eulerAngleY(glm::pi<float>()) * glm::scale(glm::vec3(0.03f)),
 		glm::vec3(0.3, 0.3, 0.5),
-		0.2,1.0
+		0.2, 1.0
 	);
 
 	spotlightPos = spaceshipPos + 0.2 * spaceshipDir;
@@ -855,7 +1063,7 @@ void renderScene(GLFWwindow* window)
 	//Core::DrawContext(models::testContext);
 
 	for (auto& boid : boids) {
-	
+
 
 		glm::mat4 model = glm::translate(glm::mat4(1.0f), boid.position);
 		model = glm::scale(model, glm::vec3(0.3f));
@@ -873,12 +1081,12 @@ void renderScene(GLFWwindow* window)
 		}
 
 		// Teraz rysowanie AABB
-		updateBoundingBox(boid);  
+		updateBoundingBox(boid);
 	}
 
 	updateBoids();
-	 
-	
+
+
 
 	glUseProgram(0);
 	glfwSwapBuffers(window);
@@ -896,7 +1104,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 void loadModelToContext(std::string path, Core::RenderContext& context)
 {
 	Assimp::Importer import;
-	const aiScene* scene = import.ReadFile(path, aiProcess_Triangulate | aiProcess_CalcTangentSpace);
+	const aiScene * scene = import.ReadFile(path, aiProcess_Triangulate | aiProcess_CalcTangentSpace);
 
 	if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
 	{
@@ -909,12 +1117,15 @@ void loadModelToContext(std::string path, Core::RenderContext& context)
 
 
 void init(GLFWwindow* window)
-{	
+{
 	initDepthMap();
 
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
 	glEnable(GL_DEPTH_TEST);
+
+	initSkybox();
+
 	program = shaderLoader.CreateProgram("shaders/shader_9_1.vert", "shaders/shader_9_1.frag");
 	programTest = shaderLoader.CreateProgram("shaders/test.vert", "shaders/test.frag");
 	programSun = shaderLoader.CreateProgram("shaders/shader_8_sun.vert", "shaders/shader_8_sun.frag");
@@ -942,6 +1153,7 @@ void init(GLFWwindow* window)
 	loadModelToContext("./models/window.obj", models::windowContext);
 	loadModelToContext("./models/test.obj", models::testContext);
 	loadModelToContext("./models/bird.obj", birdContext);
+	loadModelToContext("./models/Tree1.obj", models::treeContext);
 
 	texture::earth = Core::LoadTexture("textures/earth.png");
 	texture::earth_map = Core::LoadTexture("textures/earth_normalmap.png");
@@ -957,11 +1169,13 @@ void init(GLFWwindow* window)
 	texture::bird2_map = Core::LoadTexture("textures/bird2_normal.png");
 	texture::bird3 = Core::LoadTexture("textures/bird3.png");
 	texture::bird3_map = Core::LoadTexture("textures/bird3_normal.png");
-	
+
 	terrainTexture = Core::LoadTexture("textures/grass1.png");
 	terrainTexture_map = Core::LoadTexture("textures/grass1_normal.png");
 
-	generateTerrain(GRID_SIZE, HEIGHT_SCALE); 
+	generateTerrain(GRID_SIZE, HEIGHT_SCALE);
+	generateTrees(20, GRID_SIZE);
+
 
 	initBoids(100);
 	addObstacle(glm::vec3(0.0f, 0.0f, 0.0f), models::roomContext, "./models/room.obj");
@@ -977,7 +1191,7 @@ void shutdown(GLFWwindow* window)
 //obsluga wejscia
 void processInput(GLFWwindow* window)
 {
-	glm::vec3 spaceshipSide = glm::normalize(glm::cross(spaceshipDir, glm::vec3(0.f,1.f,0.f)));
+	glm::vec3 spaceshipSide = glm::normalize(glm::cross(spaceshipDir, glm::vec3(0.f, 1.f, 0.f)));
 	glm::vec3 spaceshipUp = glm::vec3(0.f, 1.f, 0.f);
 	float angleSpeed = 0.05f * deltaTime * 60;
 	float moveSpeed = 0.05f * deltaTime * 60;
