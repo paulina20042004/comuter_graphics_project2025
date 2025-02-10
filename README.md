@@ -17,8 +17,11 @@ Boidsy omijają gdy, mają kolizję z pokojem, drzewami. Nie wlatują również 
 # Sterowanie projektem:
 
 **Przyciski C i V** włączają i wyłączają shadow mapping.
+
 **Przyciski P i O** zatrzymują i ruszają ptaki.
+
 **Klawisze 1 i 2** przyciemniają i rozjaśniają scenę.
+
 **Klawisze K i L** ustawiają poziom latania boidów. W górę lub w dół.
 
 # Podział pracy:
