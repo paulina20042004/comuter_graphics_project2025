@@ -102,7 +102,7 @@ GLuint VAO, VBO;
 
 float aspectRatio = 1.f;
 
-float exposition = 1.f;
+float exposition = 3.f;
 
 glm::vec3 pointlightPos = glm::vec3(0, 2, 0);
 glm::vec3 pointlightColor = glm::vec3(0.9, 0.6, 0.6);
@@ -120,6 +120,7 @@ bool boidsPause = false;
 
 float lastTime = -1.f;
 float deltaTime = 0.f;
+float limit2 = 6.0f;
 
 struct AABB {
 	float xMin, yMin, zMin;
@@ -502,7 +503,7 @@ bool checkCollision(const AABB& box1, const AABB& box2) {
 		box1.zMax < box2.zMin || box1.zMin > box2.zMax);
 }
 
-glm::vec3 chcekColisionBoidsWithObstacles(const Boid& self, const std::vector<Obstacle>& obstacles) {
+glm::vec3 checkColisionBoidsWithObstacles(const Boid& self, const std::vector<Obstacle>& obstacles) {
 	glm::vec3 avoidanceVector(0.0f);
 	bool collisionDetected = false;
 
@@ -536,6 +537,8 @@ void initBoids(int numBoids) {
 		newBoid.position = glm::vec3(rand() % 50 - 25, rand() % 50 - 25, rand() % 50 - 25); // -25 do 24.
 		newBoid.velocity = glm::vec3(rand() % 2 - 1, rand() % 2 - 1, rand() % 2 - 1);// od -1 do 1
 		newBoid.groupId = i % 3;
+
+
 
 		newBoid.boundingBox = AABB(
 			newBoid.position.x - modelSizeX,
@@ -650,15 +653,15 @@ glm::vec3 cohesion(const Boid& currentBoid, const std::vector<Boid>& boids, floa
 
 
 void updateBoids() {
-	float maxSpeed = 4.0f;
+	float maxSpeed = 3.0f;
 	if (boidsPause) {
 		maxSpeed = 0.0f;
 	}
 	else {
-		maxSpeed = 4.0f;
+		maxSpeed = 3.0f;
 	}
 
-	float limit = 4.0f;
+	float limit = 8.0f;//4.0f;
 	float separationRadius = 1.5f;
 	float alignmentRadius = 3.0f;
 	float cohesionRadius = 2.0f;
@@ -666,13 +669,13 @@ void updateBoids() {
 	float separationWeight = 1.5f;
 	float alignmentWeight = 1.0f;
 	float cohesionWeight = 1.0f;
-	float avoidanceWeight = 40.0f;//1.5f;
+	float avoidanceWeight = 50.0f;//40.0f;//1.5f;
 
 	for (auto& boid : boids) {
 		glm::vec3 separationForce = separation(boid, boids, separationRadius) * separationWeight;
 		glm::vec3 alignmentForce = align(boid, boids, alignmentRadius, maxSpeed) * alignmentWeight;
 		glm::vec3 cohesionForce = cohesion(boid, boids, cohesionRadius) * cohesionWeight;
-		glm::vec3 avoidanceForce = chcekColisionBoidsWithObstacles(boid, obstacles) * avoidanceWeight;
+		glm::vec3 avoidanceForce = checkColisionBoidsWithObstacles(boid, obstacles) * avoidanceWeight;
 
 		boid.velocity += (separationForce + alignmentForce + cohesionForce + avoidanceForce) * deltaTime;
 
@@ -685,20 +688,35 @@ void updateBoids() {
 		// collision with terrain
 		float terrainHeight = getTerrainHeight(boid.position.x, boid.position.z);
 
-		if (boid.position.y < terrainHeight) {
-			boid.position.y = terrainHeight;  
+		if (boid.position.y < terrainHeight*0.8f) {
+			boid.position.y = terrainHeight*0.8f;  
 			boid.velocity.y = std::abs(boid.velocity.y) * 0.5f; 
 		}
 
 		for (int i = 0; i < 3; ++i) {
-			if (boid.position[i] < -limit) {
-				boid.position[i] = -limit;
-				boid.velocity[i] = -boid.velocity[i];
+			if (i==1){
+				if (boid.position[i] < limit2) {
+					boid.position[i] = limit2;
+					boid.velocity[i] = -boid.velocity[i];
+				}
+				if (boid.position[i] > limit2) {
+					boid.position[i] = limit2;
+					boid.velocity[i] = -boid.velocity[i];
+				}
+
 			}
-			if (boid.position[i] > limit) {
-				boid.position[i] = limit;
-				boid.velocity[i] = -boid.velocity[i];
+			else {
+				if (boid.position[i] < -limit) {
+					boid.position[i] = -limit;
+					boid.velocity[i] = -boid.velocity[i];
+				}
+				if (boid.position[i] > limit) {
+					boid.position[i] = limit;
+					boid.velocity[i] = -boid.velocity[i];
+				}
+
 			}
+
 		}
 	}
 }
@@ -1067,9 +1085,7 @@ void renderScene(GLFWwindow* window)
 
 		glm::mat4 model = glm::translate(glm::mat4(1.0f), boid.position);
 		model = glm::scale(model, glm::vec3(0.3f));
-		//model = glm::rotate(model, angleXY, glm::vec3(0.0f, 1.0f, 0.0f));
 
-		// Rysowanie boidów (obiektów 3D)
 		if (boid.groupId == 0) {
 			drawObjectTexture(birdContext, model, texture::bird1, programTex, texture::bird1_map);
 		}
@@ -1080,7 +1096,6 @@ void renderScene(GLFWwindow* window)
 			drawObjectTexture(birdContext, model, texture::bird3, programTex, texture::bird3_map);
 		}
 
-		// Teraz rysowanie AABB
 		updateBoundingBox(boid);
 	}
 
@@ -1179,7 +1194,6 @@ void init(GLFWwindow* window)
 
 	initBoids(100);
 	addObstacle(glm::vec3(0.0f, 0.0f, 0.0f), models::roomContext, "./models/room.obj");
-	//initObstacles(1);
 
 }
 
@@ -1229,6 +1243,12 @@ void processInput(GLFWwindow* window)
 	}
 	if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS) {
 		boidsPause = false;
+	}
+	if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
+		limit2 = limit2 + 1;
+	}
+	if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) {
+		limit2 = limit2 - 1;
 	}
 
 
